@@ -1,0 +1,25 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "HynfxYegMG8sq9MpFfPu7h1EOvI=",
+			"path": "github.com/aws/aws-sdk-go/aws/session",
+			"revision": "4644cdf3025727edc7d7e74902201364016b0221",
+			"revisionTime": "2016-12-16T23:57:25Z"
+		},
+		{
+			"checksumSHA1": "4PVqgos03ItgmDy/nHP6amnprzc=",
+			"path": "github.com/aws/aws-sdk-go/service/ecs",
+			"revision": "4644cdf3025727edc7d7e74902201364016b0221",
+			"revisionTime": "2016-12-16T23:57:25Z"
+		},
+		{
+			"checksumSHA1": "70+TVBeBd1kBT0jD7HdxyGmMxo8=",
+			"path": "github.com/go-ini/ini",
+			"revision": "2ba15ac2dc9cdf88c110ec2dc0ced7fa45f5678c",
+			"revisionTime": "2016-11-20T03:10:36Z"
+		}
+	],
+	"rootPath": "github.com/mmaxim/ecstools"
+}
