@@ -30,7 +30,7 @@ func mainInner() int {
 	var clusterName, region string
 	var shortArns bool
 
-	flag.StringVar(&clusterName, "cluster", "cluster", "cluster name")
+	flag.StringVar(&clusterName, "cluster", "gregord", "cluster name")
 	flag.StringVar(&region, "region", "us-east-1", "AWS region name")
 	flag.BoolVar(&shortArns, "short-arns", true, "display only last part of ARN")
 	flag.Parse()
