@@ -9,16 +9,34 @@
 			"revisionTime": "2016-12-16T23:57:25Z"
 		},
 		{
+			"checksumSHA1": "ncC2Nif217qcymv8y/rpRK0yuGY=",
+			"path": "github.com/aws/aws-sdk-go/service/cloudwatch",
+			"revision": "4644cdf3025727edc7d7e74902201364016b0221",
+			"revisionTime": "2016-12-16T23:57:25Z"
+		},
+		{
 			"checksumSHA1": "4PVqgos03ItgmDy/nHP6amnprzc=",
 			"path": "github.com/aws/aws-sdk-go/service/ecs",
 			"revision": "4644cdf3025727edc7d7e74902201364016b0221",
 			"revisionTime": "2016-12-16T23:57:25Z"
 		},
 		{
+			"checksumSHA1": "x77xUarDfVxctJMAJPCQzlYk8JM=",
+			"path": "github.com/fatih/color",
+			"revision": "bf82308e8c8546dc2b945157173eb8a959ae9505",
+			"revisionTime": "2016-10-25T12:05:01Z"
+		},
+		{
 			"checksumSHA1": "70+TVBeBd1kBT0jD7HdxyGmMxo8=",
 			"path": "github.com/go-ini/ini",
 			"revision": "2ba15ac2dc9cdf88c110ec2dc0ced7fa45f5678c",
 			"revisionTime": "2016-11-20T03:10:36Z"
+		},
+		{
+			"checksumSHA1": "GTSusTEcXS+e4bVB9GW8C9kXpSI=",
+			"path": "github.com/reconquest/loreley",
+			"revision": "2ab6b7470a54bfa9b5b0289f9b4e8fc4839838f7",
+			"revisionTime": "2016-07-08T08:05:00Z"
 		}
 	],
 	"rootPath": "github.com/mmaxim/ecstools"
