@@ -60,11 +60,12 @@ func mainInner() int {
 	fmt.Fprintf(w, "\n")
 	w.Flush()
 
-	fmt.Fprintf(w, "<fg 13><bold>Service\tStatus\tTask\tInstance ID\tInstance CPU%%<reset>\n")
+	fmt.Fprintf(w, "<fg 13><bold>Service\tStatus\tTask\tCreated At\tInstance ID\tInstance CPU%%<reset>\n")
 	for _, svc := range services {
 		for _, task := range svc.Tasks {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status,
-				truncateARN(task.TaskDefinition, shortArns), task.InstanceMetrics.ID,
+			ca := task.CreatedAt.Format("01-02-2006 15:04")
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status,
+				truncateARN(task.TaskDefinition, shortArns), ca, task.InstanceMetrics.ID,
 				task.InstanceMetrics.CPU)
 		}
 	}
