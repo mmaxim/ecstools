@@ -39,6 +39,30 @@
 			"revisionTime": "2016-11-20T03:10:36Z"
 		},
 		{
+			"checksumSHA1": "7hln62oZPZmyqEmgXaybf9WxQ7A=",
+			"path": "github.com/maruel/panicparse/stack",
+			"revision": "ad661195ed0e88491e0f14be6613304e3b1141d6",
+			"revisionTime": "2016-07-20T14:16:34Z"
+		},
+		{
+			"checksumSHA1": "yf185lmVPcvXjLZuPT1s4JzxI18=",
+			"path": "github.com/mattn/go-runewidth",
+			"revision": "737072b4e32b7a5018b4a7125da8d12de90e8045",
+			"revisionTime": "2016-10-12T01:35:12Z"
+		},
+		{
+			"checksumSHA1": "L3leymg2RT8hFl5uL+5KP/LpBkg=",
+			"path": "github.com/mitchellh/go-wordwrap",
+			"revision": "ad45545899c7b13c020ea92b2072220eefad42b8",
+			"revisionTime": "2015-03-14T17:03:34Z"
+		},
+		{
+			"checksumSHA1": "pcxo5ATo/IV/Co8/F4RmBTL+mQs=",
+			"path": "github.com/nsf/termbox-go",
+			"revision": "abe82ce5fb7a42fbd6784a5ceb71aff977e09ed8",
+			"revisionTime": "2016-12-05T19:42:51Z"
+		},
+		{
 			"checksumSHA1": "GTSusTEcXS+e4bVB9GW8C9kXpSI=",
 			"path": "github.com/reconquest/loreley",
 			"revision": "2ab6b7470a54bfa9b5b0289f9b4e8fc4839838f7",
