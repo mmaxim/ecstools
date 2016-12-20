@@ -27,6 +27,12 @@
 			"revisionTime": "2016-10-25T12:05:01Z"
 		},
 		{
+			"checksumSHA1": "lB25HtfPS/QuKInteGr0KrapTEY=",
+			"path": "github.com/gizak/termui",
+			"revision": "f63e0cdd3f66ccb5fd4a906a31576b4b67904001",
+			"revisionTime": "2016-11-29T15:18:07Z"
+		},
+		{
 			"checksumSHA1": "70+TVBeBd1kBT0jD7HdxyGmMxo8=",
 			"path": "github.com/go-ini/ini",
 			"revision": "2ba15ac2dc9cdf88c110ec2dc0ced7fa45f5678c",
