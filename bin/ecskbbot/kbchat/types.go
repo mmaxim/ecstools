@@ -1,5 +1,12 @@
 package kbchat
 
+type Sender struct {
+	Uid        string `json:"uid"`
+	Username   string `json:"username"`
+	DeviceID   string `json:"device_id"`
+	DeviceName string `json:device_name"`
+}
+
 type Channel struct {
 	Name      string `json:"name"`
 	Public    bool   `json:"public"`
@@ -31,6 +38,7 @@ type Content struct {
 
 type Message struct {
 	Content Content `json:"content"`
+	Sender  Sender  `json:"sender"`
 }
 
 type MessageHolder struct {

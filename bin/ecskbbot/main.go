@@ -67,42 +67,45 @@ func (s *BotServer) runServiceOutput(cluster string, out io.Writer) error {
 	return nil
 }
 
-func (s *BotServer) shouldSendToConv(convID string) (string, error) {
+func (s *BotServer) shouldSendToConv(conv kbchat.Conversation) (*runSpec, error) {
 
-	msgs, err := s.kbc.GetTextMessages(convID, true)
+	msgs, err := s.kbc.GetTextMessages(conv.Id, true)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	for _, msg := range msgs {
 		if msg.Content.Type == "text" && strings.HasPrefix(msg.Content.Text.Body, "!ecslist") {
 			toks := strings.Split(msg.Content.Text.Body, " ")
 			if len(toks) == 2 {
-				return toks[1], nil
+				return &runSpec{conv: conv, cluster: toks[1], author: msg.Sender.Username}, nil
 			} else if len(toks) == 1 {
-				return s.opts.ClusterName, nil
+				return &runSpec{conv: conv, cluster: s.opts.ClusterName, author: msg.Sender.Username}, nil
 			}
-			return "", fmt.Errorf("invalid ecslist command")
+			s.kbc.SendMessage(conv.Id, "invalid ecslist command")
+			return nil, nil
 		}
 	}
 
-	return "", nil
+	return nil, nil
 }
 
 type runSpec struct {
 	conv    kbchat.Conversation
 	cluster string
+	author  string
 }
 
 func (s *BotServer) getConvsToSend(convs []kbchat.Conversation) ([]runSpec, error) {
 	var res []runSpec
 	for _, conv := range convs {
-		cluster, err := s.shouldSendToConv(conv.Id)
+		spec, err := s.shouldSendToConv(conv)
 		if err != nil {
 			return nil, err
 		}
-		if len(cluster) > 0 {
-			res = append(res, runSpec{conv: conv, cluster: cluster})
-			fmt.Printf("sending to: id: %s name: %s cluster: %s\n", conv.Id, conv.Channel.Name, cluster)
+		if spec != nil {
+			res = append(res, *spec)
+			fmt.Printf("sending to: id: %s name: %s cluster: %s author: %s\n", conv.Id,
+				conv.Channel.Name, spec.cluster, spec.author)
 		}
 	}
 	return res, nil
@@ -123,7 +126,8 @@ func (s *BotServer) once() error {
 	if len(specs) > 0 {
 		var ecsInfo bytes.Buffer
 		for _, spec := range specs {
-			if err := s.kbc.SendMessage(spec.conv.Id, fmt.Sprintf("loading cluster: %s", spec.cluster)); err != nil {
+			greet := fmt.Sprintf("Thanks %s! Loading cluster: *%s*", spec.author, spec.cluster)
+			if err := s.kbc.SendMessage(spec.conv.Id, greet); err != nil {
 				return err
 			}
 			if err := s.runServiceOutput(spec.cluster, &ecsInfo); err != nil {
