@@ -36,16 +36,16 @@ type BotServer struct {
 	kbc *kbchat.API
 }
 
-func NewBotServer(opts Options, ecs *libecs.ECS) *BotServer {
+func NewBotServer(opts Options) *BotServer {
 	return &BotServer{
 		opts: opts,
-		ecs:  ecs,
 	}
 }
 
-func (s *BotServer) runServiceOutput(out io.Writer) error {
+func (s *BotServer) runServiceOutput(cluster string, out io.Writer) error {
+
 	ecs, err := libecs.New(libecs.ECSConfig{
-		Cluster: s.opts.ClusterName,
+		Cluster: cluster,
 		Region:  s.opts.Region,
 	})
 	if err != nil {
@@ -67,44 +67,45 @@ func (s *BotServer) runServiceOutput(out io.Writer) error {
 	return nil
 }
 
-func (s *BotServer) shouldSendToConv(convID string) (bool, error) {
+func (s *BotServer) shouldSendToConv(convID string) (string, error) {
 
 	msgs, err := s.kbc.GetTextMessages(convID, true)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	for _, msg := range msgs {
-		if msg.Content.Type == "text" && msg.Content.Text.Body == "!ecslist" {
-			return true, nil
+		if msg.Content.Type == "text" && strings.HasPrefix(msg.Content.Text.Body, "!ecslist") {
+			toks := strings.Split(msg.Content.Text.Body, " ")
+			if len(toks) == 2 {
+				return toks[1], nil
+			} else if len(toks) == 1 {
+				return s.opts.ClusterName, nil
+			}
+			return "", fmt.Errorf("invalid ecslist command")
 		}
 	}
 
-	return false, nil
+	return "", nil
 }
 
-func (s *BotServer) getConvsToSend(convs []kbchat.Conversation) ([]kbchat.Conversation, error) {
-	var res []kbchat.Conversation
+type runSpec struct {
+	conv    kbchat.Conversation
+	cluster string
+}
+
+func (s *BotServer) getConvsToSend(convs []kbchat.Conversation) ([]runSpec, error) {
+	var res []runSpec
 	for _, conv := range convs {
-		shouldSend, err := s.shouldSendToConv(conv.Id)
+		cluster, err := s.shouldSendToConv(conv.Id)
 		if err != nil {
 			return nil, err
 		}
-		if shouldSend {
-			res = append(res, conv)
-			fmt.Printf("sending to: id: %s name: %s\n", conv.Id, conv.Channel.Name)
+		if len(cluster) > 0 {
+			res = append(res, runSpec{conv: conv, cluster: cluster})
+			fmt.Printf("sending to: id: %s name: %s cluster: %s\n", conv.Id, conv.Channel.Name, cluster)
 		}
 	}
 	return res, nil
-}
-
-func (s *BotServer) sendToConvs(convs []kbchat.Conversation, outputRes string) error {
-	outputRes = fmt.Sprintf("```%s```", strings.Replace(outputRes, "\n", "\\n", -1))
-	for _, conv := range convs {
-		if err := s.kbc.SendMessage(conv.Id, outputRes); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *BotServer) once() error {
@@ -114,18 +115,24 @@ func (s *BotServer) once() error {
 		return err
 	}
 
-	convs, err = s.getConvsToSend(convs)
+	specs, err := s.getConvsToSend(convs)
 	if err != nil {
 		return err
 	}
 
-	if len(convs) > 0 {
+	if len(specs) > 0 {
 		var ecsInfo bytes.Buffer
-		if err := s.runServiceOutput(&ecsInfo); err != nil {
-			return err
-		}
-		if err := s.sendToConvs(convs, ecsInfo.String()); err != nil {
-			return err
+		for _, spec := range specs {
+			if err := s.kbc.SendMessage(spec.conv.Id, fmt.Sprintf("loading cluster: %s", spec.cluster)); err != nil {
+				return err
+			}
+			if err := s.runServiceOutput(spec.cluster, &ecsInfo); err != nil {
+				return err
+			}
+			outputRes := fmt.Sprintf("```%s```", strings.Replace(ecsInfo.String(), "\n", "\\n", -1))
+			if err := s.kbc.SendMessage(spec.conv.Id, outputRes); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -170,17 +177,7 @@ func mainInner() int {
 	flag.BoolVar(&opts.ShortArns, "short-arns", true, "display only last part of ARN")
 	flag.Parse()
 
-	ecs, err := libecs.New(libecs.ECSConfig{
-		Cluster: opts.ClusterName,
-		Region:  opts.Region,
-	})
-
-	if err != nil {
-		fmt.Printf("failed to create ECS API object: %s", err.Error())
-		return 3
-	}
-
-	bs := NewBotServer(opts, ecs)
+	bs := NewBotServer(opts)
 	if err := bs.Start(); err != nil {
 		fmt.Printf("error running chat loop: %s\n", err.Error())
 	}
