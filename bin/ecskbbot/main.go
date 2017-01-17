@@ -146,9 +146,10 @@ func getConvsToSend(convIDs []string, input io.Writer, output io.Reader) ([]stri
 func sendToConvs(convIDs []string, outputRes string, input io.Writer, output io.Reader) error {
 	outputRes = strings.Replace(outputRes, "\n", "\\n", -1)
 	for _, convID := range convIDs {
-		send := fmt.Sprintf("{\"method\": \"send\", \"params\": {\"options\": {\"conversation_id\": \"%s\", \"message\": {\"body\": \"%s\"}}}}", convID, outputRes)
-		fmt.Println(send)
+		send := fmt.Sprintf("{\"method\": \"send\", \"params\": {\"options\": {\"conversation_id\": \"%s\", \"message\": {\"body\": \"```%s```\"}}}}", convID, outputRes)
 		io.WriteString(input, send)
+		o := bufio.NewScanner(output)
+		o.Scan()
 	}
 	return nil
 }
