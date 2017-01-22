@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os/exec"
+	"time"
 )
 
 type API struct {
@@ -12,11 +14,26 @@ type API struct {
 	output *bufio.Scanner
 }
 
-func NewAPI(input io.Writer, output *bufio.Scanner) *API {
+func NewAPI(keybaseLocation string) (*API, error) {
+
+	p := exec.Command(keybaseLocation, "chat", "api")
+	input, err := p.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	output, err := p.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.Start(); err != nil {
+		return nil, err
+	}
+
+	boutput := bufio.NewScanner(output)
 	return &API{
 		input:  input,
-		output: output,
-	}
+		output: boutput,
+	}, nil
 }
 
 func (a *API) GetConversations(unreadOnly bool) ([]Conversation, error) {
@@ -63,4 +80,83 @@ func (a *API) SendMessage(convID string, body string) error {
 	}
 	a.output.Scan()
 	return nil
+}
+
+type SubscriptionMessage struct {
+	Message      Message
+	Conversation Conversation
+}
+
+type NewMessageSubscription struct {
+	newMsgsCh  <-chan SubscriptionMessage
+	errorCh    <-chan error
+	shutdownCh chan struct{}
+}
+
+func (m NewMessageSubscription) Read() (SubscriptionMessage, error) {
+	select {
+	case msg := <-m.newMsgsCh:
+		return msg, nil
+	case err := <-m.errorCh:
+		return SubscriptionMessage{}, err
+	}
+}
+
+func (m NewMessageSubscription) Shutdown() {
+	m.shutdownCh <- struct{}{}
+}
+
+func (a *API) getUnreadMessagesFromConvs(convs []Conversation) ([]SubscriptionMessage, error) {
+	var res []SubscriptionMessage
+	for _, conv := range convs {
+		msgs, err := a.GetTextMessages(conv.Id, true)
+		if err != nil {
+			return nil, err
+		}
+		for _, msg := range msgs {
+			res = append(res, SubscriptionMessage{
+				Message:      msg,
+				Conversation: conv,
+			})
+		}
+	}
+	return res, nil
+}
+
+func (a *API) ListenForNewTextMessages() NewMessageSubscription {
+	newMsgCh := make(chan SubscriptionMessage, 100)
+	errorCh := make(chan error, 100)
+	shutdownCh := make(chan struct{})
+	sub := NewMessageSubscription{
+		newMsgsCh:  newMsgCh,
+		shutdownCh: shutdownCh,
+		errorCh:    errorCh,
+	}
+	go func() {
+		for {
+			select {
+			case <-shutdownCh:
+				return
+			case <-time.After(2 * time.Second):
+				// Get all unread convos
+				convs, err := a.GetConversations(true)
+				if err != nil {
+					errorCh <- err
+					continue
+				}
+				// Get unread msgs from convs
+				msgs, err := a.getUnreadMessagesFromConvs(convs)
+				if err != nil {
+					errorCh <- err
+					continue
+				}
+				// Send all the new messages out
+				for _, msg := range msgs {
+					newMsgCh <- msg
+				}
+			}
+		}
+	}()
+
+	return sub
 }

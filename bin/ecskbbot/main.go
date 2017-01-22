@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"time"
 
 	"bytes"
 
@@ -42,6 +39,10 @@ func NewBotServer(opts Options) *BotServer {
 	}
 }
 
+func (s *BotServer) debug(msg string, args ...interface{}) {
+	fmt.Printf("BotServer: "+msg+"\n", args...)
+}
+
 func (s *BotServer) runServiceOutput(cluster string, out io.Writer) error {
 
 	ecs, err := libecs.New(libecs.ECSConfig{
@@ -49,41 +50,35 @@ func (s *BotServer) runServiceOutput(cluster string, out io.Writer) error {
 		Region:  s.opts.Region,
 	})
 	if err != nil {
-		fmt.Printf("failed to create ECS API object: %s\n", err.Error())
+		s.debug("failed to create ECS API object: %s", err.Error())
 		return err
 	}
 
 	services, err := ecs.ListServices()
 	if err != nil {
-		fmt.Printf("failed to list services: %s\n", err.Error())
+		s.debug("failed to list services: %s", err.Error())
+		return err
 	}
 
 	output := libecs.NewBasicServiceOutputer(s.opts.ShortArns)
 
 	if err := output.Display(services, out); err != nil {
-		fmt.Printf("failed to display: %s\n", err.Error())
+		s.debug("failed to display: %s", err.Error())
 		return err
 	}
 	return nil
 }
 
-func (s *BotServer) shouldSendToConv(conv kbchat.Conversation) (*runSpec, error) {
-
-	msgs, err := s.kbc.GetTextMessages(conv.Id, true)
-	if err != nil {
-		return nil, err
-	}
-	for _, msg := range msgs {
-		if msg.Content.Type == "text" && strings.HasPrefix(msg.Content.Text.Body, "!ecslist") {
-			toks := strings.Split(msg.Content.Text.Body, " ")
-			if len(toks) == 2 {
-				return &runSpec{conv: conv, cluster: toks[1], author: msg.Sender.Username}, nil
-			} else if len(toks) == 1 {
-				return &runSpec{conv: conv, cluster: s.opts.ClusterName, author: msg.Sender.Username}, nil
-			}
-			s.kbc.SendMessage(conv.Id, "invalid ecslist command")
-			return nil, nil
+func (s *BotServer) shouldSendToConv(conv kbchat.Conversation, msg kbchat.Message) (*runSpec, error) {
+	if strings.HasPrefix(msg.Content.Text.Body, "!ecslist") {
+		toks := strings.Split(msg.Content.Text.Body, " ")
+		if len(toks) == 2 {
+			return &runSpec{conv: conv, cluster: toks[1], author: msg.Sender.Username}, nil
+		} else if len(toks) == 1 {
+			return &runSpec{conv: conv, cluster: s.opts.ClusterName, author: msg.Sender.Username}, nil
 		}
+		s.kbc.SendMessage(conv.Id, "invalid ecslist command")
+		return nil, nil
 	}
 
 	return nil, nil
@@ -95,79 +90,47 @@ type runSpec struct {
 	author  string
 }
 
-func (s *BotServer) getConvsToSend(convs []kbchat.Conversation) ([]runSpec, error) {
-	var res []runSpec
-	for _, conv := range convs {
-		spec, err := s.shouldSendToConv(conv)
-		if err != nil {
-			return nil, err
-		}
-		if spec != nil {
-			res = append(res, *spec)
-			fmt.Printf("sending to: id: %s name: %s cluster: %s author: %s\n", conv.Id,
-				conv.Channel.Name, spec.cluster, spec.author)
-		}
-	}
-	return res, nil
-}
-
-func (s *BotServer) once() error {
-
-	convs, err := s.kbc.GetConversations(true)
-	if err != nil {
+func (s *BotServer) sendReply(spec *runSpec) error {
+	var ecsInfo bytes.Buffer
+	greet := fmt.Sprintf("Thanks %s! Loading cluster: *%s*", spec.author, spec.cluster)
+	if err := s.kbc.SendMessage(spec.conv.Id, greet); err != nil {
 		return err
 	}
-
-	specs, err := s.getConvsToSend(convs)
-	if err != nil {
+	if err := s.runServiceOutput(spec.cluster, &ecsInfo); err != nil {
 		return err
 	}
-
-	if len(specs) > 0 {
-		var ecsInfo bytes.Buffer
-		for _, spec := range specs {
-			greet := fmt.Sprintf("Thanks %s! Loading cluster: *%s*", spec.author, spec.cluster)
-			if err := s.kbc.SendMessage(spec.conv.Id, greet); err != nil {
-				return err
-			}
-			if err := s.runServiceOutput(spec.cluster, &ecsInfo); err != nil {
-				return err
-			}
-			outputRes := fmt.Sprintf("```%s```", strings.Replace(ecsInfo.String(), "\n", "\\n", -1))
-			if err := s.kbc.SendMessage(spec.conv.Id, outputRes); err != nil {
-				return err
-			}
-		}
+	outputRes := fmt.Sprintf("```%s```", strings.Replace(ecsInfo.String(), "\n", "\\n", -1))
+	if err := s.kbc.SendMessage(spec.conv.Id, outputRes); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (s *BotServer) Start() error {
+func (s *BotServer) Start() (err error) {
 
 	// Start up KB chat
-	p := exec.Command(s.opts.KeybaseLocation, "chat", "api")
-	input, err := p.StdinPipe()
-	if err != nil {
-		return err
-	}
-	output, err := p.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err := p.Start(); err != nil {
+	if s.kbc, err = kbchat.NewAPI(s.opts.KeybaseLocation); err != nil {
 		return err
 	}
 
-	boutput := bufio.NewScanner(output)
-	s.kbc = kbchat.NewAPI(input, boutput)
-	s.once()
-
+	// Subscribe to new messages
+	sub := s.kbc.ListenForNewTextMessages()
 	for {
-		select {
-		case <-time.After(2 * time.Second):
-			if err := s.once(); err != nil {
-				return err
-			}
+		msg, err := sub.Read()
+		if err != nil {
+			s.debug("Read() error: %s", err.Error())
+			continue
+		}
+		spec, err := s.shouldSendToConv(msg.Conversation, msg.Message)
+		if err != nil {
+			s.debug("shouldSendToConv() error: %s", err.Error())
+			continue
+		}
+
+		if spec != nil {
+			s.debug("sending reply on conv: %s author: %s cluster: %s", spec.conv.Channel.Name,
+				spec.author, spec.cluster)
+			s.sendReply(spec)
 		}
 	}
 }
