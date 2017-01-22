@@ -10,7 +10,7 @@ import (
 
 	"strings"
 
-	"github.com/mmaxim/ecstools/bin/ecskbbot/kbchat"
+	"github.com/keybase/go-keybase-chat-bot/kbchat"
 	"github.com/mmaxim/ecstools/libecs"
 )
 
@@ -109,7 +109,7 @@ func (s *BotServer) sendReply(spec *runSpec) error {
 func (s *BotServer) Start() (err error) {
 
 	// Start up KB chat
-	if s.kbc, err = kbchat.NewAPI(s.opts.KeybaseLocation); err != nil {
+	if s.kbc, err = kbchat.Start(s.opts.KeybaseLocation); err != nil {
 		return err
 	}
 

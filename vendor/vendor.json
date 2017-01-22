@@ -39,6 +39,12 @@
 			"revisionTime": "2016-11-20T03:10:36Z"
 		},
 		{
+			"checksumSHA1": "DdtkhTHpYxe5iCGV96dh6R9loEM=",
+			"path": "github.com/keybase/go-keybase-chat-bot/kbchat",
+			"revision": "9da5f477e9eaebaabba92ed07b1df39272652248",
+			"revisionTime": "2017-01-22T05:05:55Z"
+		},
+		{
 			"checksumSHA1": "7hln62oZPZmyqEmgXaybf9WxQ7A=",
 			"path": "github.com/maruel/panicparse/stack",
 			"revision": "ad661195ed0e88491e0f14be6613304e3b1141d6",
