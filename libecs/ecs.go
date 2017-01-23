@@ -101,9 +101,14 @@ func (e *ECS) getInstanceMetrics(instance string) (InstanceMetrics, error) {
 		return InstanceMetrics{}, err
 	}
 
-	cpu := cpuResp.Datapoints[0].Average
+	var cpu float64
+	if len(cpuResp.Datapoints) > 0 {
+		cpu = *cpuResp.Datapoints[0].Average
+	} else {
+		cpu = 0
+	}
 	return InstanceMetrics{
-		CPU: *cpu,
+		CPU: cpu,
 		ID:  aws.StringValue(id),
 	}, nil
 }
