@@ -184,11 +184,20 @@ func (e *ECS) getServiceMetrics(svcname string) (ServiceMetrics, error) {
 		return ServiceMetrics{}, err
 	}
 
-	cpu := cpuResp.Datapoints[0].Average
-	mem := memResp.Datapoints[0].Average
+	var cpu, mem float64
+	if len(cpuResp.Datapoints) > 0 {
+		cpu = *cpuResp.Datapoints[0].Average
+	} else {
+		cpu = 0
+	}
+	if len(memResp.Datapoints) > 0 {
+		mem = *memResp.Datapoints[0].Average
+	} else {
+		mem = 0
+	}
 	return ServiceMetrics{
-		CPU:    *cpu,
-		Memory: *mem,
+		CPU:    cpu,
+		Memory: mem,
 	}, nil
 }
 
