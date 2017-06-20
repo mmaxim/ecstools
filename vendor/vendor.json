@@ -9,16 +9,16 @@
 			"revisionTime": "2016-12-16T23:57:25Z"
 		},
 		{
-			"checksumSHA1": "ncC2Nif217qcymv8y/rpRK0yuGY=",
+			"checksumSHA1": "dqRrfGewSrIfajRNmsx1ugEYSuw=",
 			"path": "github.com/aws/aws-sdk-go/service/cloudwatch",
-			"revision": "4644cdf3025727edc7d7e74902201364016b0221",
-			"revisionTime": "2016-12-16T23:57:25Z"
+			"revision": "9467cf9b8560526d910c55d8fedd493a902ca1d8",
+			"revisionTime": "2017-06-20T21:28:37Z"
 		},
 		{
-			"checksumSHA1": "4PVqgos03ItgmDy/nHP6amnprzc=",
+			"checksumSHA1": "Tu51GVM0Y0bxV5R/PFAGOwmz2oE=",
 			"path": "github.com/aws/aws-sdk-go/service/ecs",
-			"revision": "4644cdf3025727edc7d7e74902201364016b0221",
-			"revisionTime": "2016-12-16T23:57:25Z"
+			"revision": "9467cf9b8560526d910c55d8fedd493a902ca1d8",
+			"revisionTime": "2017-06-20T21:28:37Z"
 		},
 		{
 			"checksumSHA1": "x77xUarDfVxctJMAJPCQzlYk8JM=",
