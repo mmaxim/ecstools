@@ -121,6 +121,9 @@ func (e *ECS) listTasks(svc *ecs.Service) ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(resp.TaskArns) == 0 {
+		return nil, nil
+	}
 
 	respt, err := e.ecs.DescribeTasks(&ecs.DescribeTasksInput{
 		Cluster: aws.String(e.cluster()),
