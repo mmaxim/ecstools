@@ -220,38 +220,46 @@ func (e *ECS) ListServices() ([]Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	var arns []*string
-	for _, a := range resp.ServiceArns {
-		arns = append(arns, a)
-	}
-
-	// Fetch service descriptions
-	sresp, err := e.ecs.DescribeServices(&ecs.DescribeServicesInput{
-		Services: arns,
-		Cluster:  aws.String(e.cluster()),
-	})
-	if err != nil {
-		return nil, err
-	}
 
 	var res []Service
-	for _, svc := range sresp.Services {
-		metrics, err := e.getServiceMetrics(aws.StringValue(svc.ServiceName))
+	batchSize := 10
+	for batchIndex := 0; batchIndex < len(resp.ServiceArns); batchIndex += batchSize {
+		var arns []*string
+		lim := batchIndex + batchSize
+		if lim >= len(resp.ServiceArns) {
+			lim = len(resp.ServiceArns)
+		}
+		for i := batchIndex; i < lim; i++ {
+			arns = append(arns, resp.ServiceArns[i])
+		}
+
+		// Fetch service descriptions
+		sresp, err := e.ecs.DescribeServices(&ecs.DescribeServicesInput{
+			Services: arns,
+			Cluster:  aws.String(e.cluster()),
+		})
 		if err != nil {
 			return nil, err
 		}
-		s := Service{
-			Name:           aws.StringValue(svc.ServiceName),
-			Arn:            aws.StringValue(svc.ServiceArn),
-			RunningCount:   int(aws.Int64Value(svc.RunningCount)),
-			PendingCount:   int(aws.Int64Value(svc.PendingCount)),
-			TaskDefinition: aws.StringValue(svc.TaskDefinition),
-			Metrics:        metrics,
+
+		for _, svc := range sresp.Services {
+			metrics, err := e.getServiceMetrics(aws.StringValue(svc.ServiceName))
+			if err != nil {
+				return nil, err
+			}
+			s := Service{
+				Name:           aws.StringValue(svc.ServiceName),
+				Arn:            aws.StringValue(svc.ServiceArn),
+				RunningCount:   int(aws.Int64Value(svc.RunningCount)),
+				PendingCount:   int(aws.Int64Value(svc.PendingCount)),
+				TaskDefinition: aws.StringValue(svc.TaskDefinition),
+				Metrics:        metrics,
+			}
+			if s.Tasks, err = e.listTasks(svc); err != nil {
+				return nil, err
+			}
+			res = append(res, s)
 		}
-		if s.Tasks, err = e.listTasks(svc); err != nil {
-			return nil, err
-		}
-		res = append(res, s)
 	}
 
 	return res, nil
