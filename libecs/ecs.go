@@ -24,6 +24,7 @@ type Task struct {
 	Arn             string
 	InstanceArn     string
 	Status          string
+	DesiredStatus   string
 	TaskDefinition  string
 	CreatedAt       time.Time
 	InstanceMetrics InstanceMetrics
@@ -143,6 +144,7 @@ func (e *ECS) listTasks(svc *ecs.Service) ([]Task, error) {
 			Arn:             aws.StringValue(t.TaskArn),
 			InstanceArn:     aws.StringValue(t.ContainerInstanceArn),
 			Status:          aws.StringValue(t.LastStatus),
+			DesiredStatus:   aws.StringValue(t.DesiredStatus),
 			TaskDefinition:  aws.StringValue(t.TaskDefinitionArn),
 			CreatedAt:       aws.TimeValue(t.CreatedAt).Local(),
 			InstanceMetrics: im,

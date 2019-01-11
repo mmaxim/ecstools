@@ -44,11 +44,11 @@ func (o BasicServiceOutputer) Display(services []Service, out io.Writer) error {
 	fmt.Fprintf(w, "\n")
 	w.Flush()
 
-	fmt.Fprintf(w, "Service\tStatus\tTask\tCreated At\tInstance ID\tInstance CPU%%\n")
+	fmt.Fprintf(w, "Service\tStatus\tDesired\tTask\tCreated At\tInstance ID\tInstance CPU%%\n")
 	for _, svc := range services {
 		for _, task := range svc.Tasks {
 			ca := task.CreatedAt.Format("01-02-2006 15:04")
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status,
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status, task.DesiredStatus,
 				o.truncateARN(task.TaskDefinition, o.shortArns), ca, task.InstanceMetrics.ID,
 				task.InstanceMetrics.CPU)
 		}
@@ -99,11 +99,11 @@ func (o ColorServiceOutputer) Display(services []Service, out io.Writer) error {
 	fmt.Fprintf(w, "\n")
 	w.Flush()
 
-	fmt.Fprintf(w, "<fg 13><bold>Service\tStatus\tTask\tCreated At\tInstance ID\tInstance CPU%%<reset>\n")
+	fmt.Fprintf(w, "<fg 13><bold>Service\tStatus\tDesired\tTask\tCreated At\tInstance ID\tInstance CPU%%<reset>\n")
 	for _, svc := range services {
 		for _, task := range svc.Tasks {
 			ca := task.CreatedAt.Format("01-02-2006 15:04")
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status,
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status, task.DesiredStatus,
 				o.truncateARN(task.TaskDefinition, o.shortArns), ca, task.InstanceMetrics.ID,
 				task.InstanceMetrics.CPU)
 		}
