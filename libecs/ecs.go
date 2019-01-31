@@ -27,7 +27,7 @@ type Task struct {
 	DesiredStatus   string
 	TaskDefinition  string
 	CreatedAt       time.Time
-	InstanceMetrics InstanceMetrics
+	InstanceMetrics *InstanceMetrics
 }
 
 type Service struct {
@@ -136,9 +136,12 @@ func (e *ECS) listTasks(svc *ecs.Service) ([]Task, error) {
 
 	var res []Task
 	for _, t := range respt.Tasks {
-		im, err := e.getInstanceMetrics(aws.StringValue(t.ContainerInstanceArn))
-		if err != nil {
-			return res, err
+		var im *InstanceMetrics
+		if len(aws.StringValue(t.ContainerInstanceArn)) > 0 {
+			im = new(InstanceMetrics)
+			if *im, err = e.getInstanceMetrics(aws.StringValue(t.ContainerInstanceArn)); err != nil {
+				return res, err
+			}
 		}
 		res = append(res, Task{
 			Arn:             aws.StringValue(t.TaskArn),
