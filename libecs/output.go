@@ -10,6 +10,20 @@ import (
 	"github.com/reconquest/loreley"
 )
 
+func getInstanceID(task Task) string {
+	if task.InstanceMetrics != nil {
+		return task.InstanceMetrics.ID
+	}
+	return "n/a"
+}
+
+func getInstanceCPU(task Task) string {
+	if task.InstanceMetrics != nil {
+		return fmt.Sprintf("%f%%", task.InstanceMetrics.CPU)
+	}
+	return "n/a"
+}
+
 type ServiceOutputer interface {
 	Display(svcs []Service, w io.Writer) error
 }
@@ -48,9 +62,9 @@ func (o BasicServiceOutputer) Display(services []Service, out io.Writer) error {
 	for _, svc := range services {
 		for _, task := range svc.Tasks {
 			ca := task.CreatedAt.Format("01-02-2006 15:04")
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%f%%\n", svc.Name, task.Status, task.DesiredStatus,
-				o.truncateARN(task.TaskDefinition, o.shortArns), ca, task.InstanceMetrics.ID,
-				task.InstanceMetrics.CPU)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", svc.Name, task.Status, task.DesiredStatus,
+				o.truncateARN(task.TaskDefinition, o.shortArns), ca, getInstanceID(task),
+				getInstanceCPU(task))
 		}
 	}
 	w.Flush()
@@ -87,20 +101,6 @@ func (o ColorServiceOutputer) truncateARN(arn string, enabled bool) string {
 	return toks[1]
 }
 
-func (o ColorServiceOutputer) getInstanceID(task Task) string {
-	if task.InstanceMetrics != nil {
-		return task.InstanceMetrics.ID
-	}
-	return "n/a"
-}
-
-func (o ColorServiceOutputer) getInstanceCPU(task Task) string {
-	if task.InstanceMetrics != nil {
-		return fmt.Sprintf("%f%%", task.InstanceMetrics.CPU)
-	}
-	return "n/a"
-}
-
 func (o ColorServiceOutputer) Display(services []Service, out io.Writer) error {
 	buffer := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buffer, 0, 3, 5, ' ', tabwriter.FilterHTML)
@@ -118,8 +118,8 @@ func (o ColorServiceOutputer) Display(services []Service, out io.Writer) error {
 		for _, task := range svc.Tasks {
 			ca := task.CreatedAt.Format("01-02-2006 15:04")
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", svc.Name, task.Status, task.DesiredStatus,
-				o.truncateARN(task.TaskDefinition, o.shortArns), ca, o.getInstanceID(task),
-				o.getInstanceCPU(task))
+				o.truncateARN(task.TaskDefinition, o.shortArns), ca, getInstanceID(task),
+				getInstanceCPU(task))
 		}
 	}
 	w.Flush()
