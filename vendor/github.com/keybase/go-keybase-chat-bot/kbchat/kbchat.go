@@ -6,20 +6,25 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
 // API is the main object used for communicating with the Keybase JSON API
 type API struct {
-	input    io.Writer
-	output   *bufio.Scanner
-	username string
+	sync.Mutex
+	apiInput  io.Writer
+	apiOutput *bufio.Scanner
+	apiCmd    *exec.Cmd
+	username  string
+	runOpts   RunOptions
 }
 
-func getUsername(keybaseLocation string) (username string, err error) {
-	p := exec.Command(keybaseLocation, "status")
+func getUsername(runOpts RunOptions) (username string, err error) {
+	p := runOpts.Command("status")
 	output, err := p.StdoutPipe()
 	if err != nil {
 		return "", err
@@ -56,64 +61,138 @@ func getUsername(keybaseLocation string) (username string, err error) {
 	return username, nil
 }
 
-// Start fires up the Keybase JSON API in stdin/stdout mode
-func Start(keybaseLocation string) (*API, error) {
-
-	// Get username first
-	username, err := getUsername(keybaseLocation)
-	if err != nil {
-		return nil, err
-	}
-
-	p := exec.Command(keybaseLocation, "chat", "api")
-	input, err := p.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	output, err := p.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := p.Start(); err != nil {
-		return nil, err
-	}
-
-	boutput := bufio.NewScanner(output)
-	return &API{
-		input:    input,
-		output:   boutput,
-		username: username,
-	}, nil
+type OneshotOptions struct {
+	Username string
+	PaperKey string
 }
 
-// GetConversations reads all conversations from the current user's inbox. Optionally
-// can filter for unread only.
-func (a *API) GetConversations(unreadOnly bool) ([]Conversation, error) {
-	list := fmt.Sprintf(`{"method":"list", "params": { "options": { "unread_only": %v}}}`, unreadOnly)
-	if _, err := io.WriteString(a.input, list); err != nil {
+type RunOptions struct {
+	KeybaseLocation string
+	HomeDir         string
+	Oneshot         *OneshotOptions
+}
+
+func (r RunOptions) Location() string {
+	if r.KeybaseLocation == "" {
+		return "keybase"
+	}
+	return r.KeybaseLocation
+}
+
+func (r RunOptions) Command(args ...string) *exec.Cmd {
+	var cmd []string
+	if r.HomeDir != "" {
+		cmd = append(cmd, "--home", r.HomeDir)
+	}
+	cmd = append(cmd, args...)
+	return exec.Command(r.Location(), cmd...)
+}
+
+// Start fires up the Keybase JSON API in stdin/stdout mode
+func Start(runOpts RunOptions) (*API, error) {
+	api := &API{
+		runOpts: runOpts,
+	}
+	if err := api.startPipes(); err != nil {
 		return nil, err
 	}
-	a.output.Scan()
+	return api, nil
+}
+
+func (a *API) auth() (string, error) {
+	username, err := getUsername(a.runOpts)
+	if err == nil {
+		return username, nil
+	} else {
+		if a.runOpts.Oneshot == nil {
+			return "", err
+		}
+		username = ""
+	}
+	// If a paper key is specified, then login with oneshot mode (logout first)
+	if a.runOpts.Oneshot != nil {
+		if username == a.runOpts.Oneshot.Username {
+			// just get out if we are on the desired user already
+			return username, nil
+		}
+		if err := a.runOpts.Command("logout", "-f").Run(); err != nil {
+			return "", err
+		}
+		if err := a.runOpts.Command("oneshot", "--username", a.runOpts.Oneshot.Username, "--paperkey",
+			a.runOpts.Oneshot.PaperKey).Run(); err != nil {
+			return "", err
+		}
+		return username, nil
+	}
+	return "", errors.New("unable to auth")
+}
+
+func (a *API) startPipes() (err error) {
+	a.Lock()
+	defer a.Unlock()
+	if a.apiCmd != nil {
+		a.apiCmd.Process.Kill()
+	}
+	a.apiCmd = nil
+	if a.username, err = a.auth(); err != nil {
+		return err
+	}
+	a.apiCmd = a.runOpts.Command("chat", "api")
+	if a.apiInput, err = a.apiCmd.StdinPipe(); err != nil {
+		return err
+	}
+	output, err := a.apiCmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := a.apiCmd.Start(); err != nil {
+		return err
+	}
+	a.apiOutput = bufio.NewScanner(output)
+	return nil
+}
+
+var errAPIDisconnected = errors.New("chat API disconnected")
+
+func (a *API) getAPIPipesLocked() (io.Writer, *bufio.Scanner, error) {
+	// this should only be called inside a lock
+	if a.apiCmd == nil {
+		return nil, nil, errAPIDisconnected
+	}
+	return a.apiInput, a.apiOutput, nil
+}
+
+// GetConversations reads all conversations from the current user's inbox.
+func (a *API) GetConversations(unreadOnly bool) ([]Conversation, error) {
+	apiInput := fmt.Sprintf(`{"method":"list", "params": { "options": { "unread_only": %v}}}`, unreadOnly)
+	output, err := a.doFetch(apiInput)
+	if err != nil {
+		return nil, err
+	}
 
 	var inbox Inbox
-	inboxRaw := a.output.Text()
+	inboxRaw := output.Text()
 	if err := json.Unmarshal([]byte(inboxRaw[:]), &inbox); err != nil {
 		return nil, err
 	}
 	return inbox.Result.Convs, nil
 }
 
-// GetTextMessages fetches all text messages from a given conversation ID. Optionally can filter
+// GetTextMessages fetches all text messages from a given channel. Optionally can filter
 // ont unread status.
-func (a *API) GetTextMessages(convID string, unreadOnly bool) ([]Message, error) {
-	read := fmt.Sprintf(`{"method": "read", "params": {"options": {"conversation_id": "%s", "unread_only": %v}}}`, convID, unreadOnly)
-	if _, err := io.WriteString(a.input, read); err != nil {
+func (a *API) GetTextMessages(channel Channel, unreadOnly bool) ([]Message, error) {
+	channelBytes, err := json.Marshal(channel)
+	if err != nil {
 		return nil, err
 	}
-	a.output.Scan()
+	apiInput := fmt.Sprintf(`{"method": "read", "params": {"options": {"channel": %s}}}`, string(channelBytes))
+	output, err := a.doFetch(apiInput)
+	if err != nil {
+		return nil, err
+	}
 
 	var thread Thread
-	if err := json.Unmarshal([]byte(a.output.Text()), &thread); err != nil {
+	if err := json.Unmarshal([]byte(output.Text()), &thread); err != nil {
 		return nil, fmt.Errorf("unable to decode thread: %s", err.Error())
 	}
 
@@ -127,24 +206,176 @@ func (a *API) GetTextMessages(convID string, unreadOnly bool) ([]Message, error)
 	return res, nil
 }
 
-// SendMessage sends a new text message on the given conversation ID
-func (a *API) SendMessage(convID string, body string) error {
-	send := fmt.Sprintf(`{"method": "send", "params": {"options": {"conversation_id": "%s", "message": {"body": "%s"}}}}`, convID, body)
-	if _, err := io.WriteString(a.input, send); err != nil {
+type sendMessageBody struct {
+	Body string
+}
+
+type sendMessageOptions struct {
+	Channel        Channel         `json:"channel,omitempty"`
+	ConversationID string          `json:"conversation_id,omitempty"`
+	Message        sendMessageBody `json:",omitempty"`
+	Filename       string          `json:"filename,omitempty"`
+	Title          string          `json:"title,omitempty"`
+}
+
+type sendMessageParams struct {
+	Options sendMessageOptions
+}
+
+type sendMessageArg struct {
+	Method string
+	Params sendMessageParams
+}
+
+func (a *API) doSend(arg interface{}) error {
+	a.Lock()
+	defer a.Unlock()
+
+	bArg, err := json.Marshal(arg)
+	if err != nil {
 		return err
 	}
-	a.output.Scan()
+	input, output, err := a.getAPIPipesLocked()
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(input, string(bArg)); err != nil {
+		return err
+	}
+	output.Scan()
 	return nil
+}
+
+func (a *API) doFetch(apiInput string) (*bufio.Scanner, error) {
+	a.Lock()
+	defer a.Unlock()
+
+	input, output, err := a.getAPIPipesLocked()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.WriteString(input, apiInput); err != nil {
+		return nil, err
+	}
+	output.Scan()
+
+	return output, nil
+}
+
+// SendMessage sends a new text message on the given channel
+func (a *API) SendMessage(channel Channel, body string) error {
+	arg := sendMessageArg{
+		Method: "send",
+		Params: sendMessageParams{
+			Options: sendMessageOptions{
+				Channel: channel,
+				Message: sendMessageBody{
+					Body: body,
+				},
+			},
+		},
+	}
+	return a.doSend(arg)
+}
+
+func (a *API) SendMessageByConvID(convID string, body string) error {
+	arg := sendMessageArg{
+		Method: "send",
+		Params: sendMessageParams{
+			Options: sendMessageOptions{
+				ConversationID: convID,
+				Message: sendMessageBody{
+					Body: body,
+				},
+			},
+		},
+	}
+	return a.doSend(arg)
 }
 
 // SendMessageByTlfName sends a message on the given TLF name
 func (a *API) SendMessageByTlfName(tlfName string, body string) error {
-	send := fmt.Sprintf(`{"method": "send", "params": {"options": {"channel": { "name": "%s"}, "message": {"body": "%s"}}}}`, tlfName, body)
-	if _, err := io.WriteString(a.input, send); err != nil {
-		return err
+	arg := sendMessageArg{
+		Method: "send",
+		Params: sendMessageParams{
+			Options: sendMessageOptions{
+				Channel: Channel{
+					Name: tlfName,
+				},
+				Message: sendMessageBody{
+					Body: body,
+				},
+			},
+		},
 	}
-	a.output.Scan()
-	return nil
+	return a.doSend(arg)
+}
+
+func (a *API) SendMessageByTeamName(teamName string, body string, inChannel *string) error {
+	channel := "general"
+	if inChannel != nil {
+		channel = *inChannel
+	}
+	arg := sendMessageArg{
+		Method: "send",
+		Params: sendMessageParams{
+			Options: sendMessageOptions{
+				Channel: Channel{
+					MembersType: "team",
+					Name:        teamName,
+					TopicName:   channel,
+				},
+				Message: sendMessageBody{
+					Body: body,
+				},
+			},
+		},
+	}
+	return a.doSend(arg)
+}
+
+func (a *API) SendAttachmentByTeam(teamName string, filename string, title string, inChannel *string) error {
+	channel := "general"
+	if inChannel != nil {
+		channel = *inChannel
+	}
+	arg := sendMessageArg{
+		Method: "attach",
+		Params: sendMessageParams{
+			Options: sendMessageOptions{
+				Channel: Channel{
+					MembersType: "team",
+					Name:        teamName,
+					TopicName:   channel,
+				},
+				Filename: filename,
+				Title:    title,
+			},
+		},
+	}
+	return a.doSend(arg)
+}
+
+type advertiseParams struct {
+	Options Advertisement
+}
+
+type advertiseMsgArg struct {
+	Method string
+	Params advertiseParams
+}
+
+func newAdvertiseMsgArg(ad Advertisement) advertiseMsgArg {
+	return advertiseMsgArg{
+		Method: "advertisecommands",
+		Params: advertiseParams{
+			Options: ad,
+		},
+	}
+}
+
+func (a *API) AdvertiseCommands(ad Advertisement) error {
+	return a.doSend(newAdvertiseMsgArg(ad))
 }
 
 func (a *API) Username() string {
@@ -157,15 +388,20 @@ type SubscriptionMessage struct {
 	Conversation Conversation
 }
 
-// NewMessageSubscription has methods to control the background message fetcher loop
-type NewMessageSubscription struct {
-	newMsgsCh  <-chan SubscriptionMessage
-	errorCh    <-chan error
-	shutdownCh chan struct{}
+type SubscriptionWalletEvent struct {
+	Payment Payment
+}
+
+// NewSubscription has methods to control the background message fetcher loop
+type NewSubscription struct {
+	newMsgsCh   <-chan SubscriptionMessage
+	newWalletCh <-chan SubscriptionWalletEvent
+	errorCh     <-chan error
+	shutdownCh  chan struct{}
 }
 
 // Read blocks until a new message arrives
-func (m NewMessageSubscription) Read() (SubscriptionMessage, error) {
+func (m NewSubscription) Read() (SubscriptionMessage, error) {
 	select {
 	case msg := <-m.newMsgsCh:
 		return msg, nil
@@ -174,63 +410,148 @@ func (m NewMessageSubscription) Read() (SubscriptionMessage, error) {
 	}
 }
 
+// Read blocks until a new message arrives
+func (m NewSubscription) ReadWallet() (SubscriptionWalletEvent, error) {
+	select {
+	case msg := <-m.newWalletCh:
+		return msg, nil
+	case err := <-m.errorCh:
+		return SubscriptionWalletEvent{}, err
+	}
+}
+
 // Shutdown terminates the background process
-func (m NewMessageSubscription) Shutdown() {
+func (m NewSubscription) Shutdown() {
 	m.shutdownCh <- struct{}{}
 }
 
-func (a *API) getUnreadMessagesFromConvs(convs []Conversation) ([]SubscriptionMessage, error) {
-	var res []SubscriptionMessage
-	for _, conv := range convs {
-		msgs, err := a.GetTextMessages(conv.Id, true)
-		if err != nil {
-			return nil, err
-		}
-		for _, msg := range msgs {
-			res = append(res, SubscriptionMessage{
-				Message:      msg,
-				Conversation: conv,
-			})
-		}
-	}
-	return res, nil
+type ListenOptions struct {
+	Wallet bool
 }
 
-// ListenForNewTextMessages fires off a background loop to fetch new unread messages.
-func (a *API) ListenForNewTextMessages() NewMessageSubscription {
+// ListenForNewTextMessages proxies to Listen without wallet events
+func (a *API) ListenForNewTextMessages() (NewSubscription, error) {
+	opts := ListenOptions{Wallet: false}
+	return a.Listen(opts)
+}
+
+// Listen fires of a background loop and puts chat messages and wallet
+// events into channels
+func (a *API) Listen(opts ListenOptions) (NewSubscription, error) {
 	newMsgCh := make(chan SubscriptionMessage, 100)
+	newWalletCh := make(chan SubscriptionWalletEvent, 100)
 	errorCh := make(chan error, 100)
 	shutdownCh := make(chan struct{})
-	sub := NewMessageSubscription{
-		newMsgsCh:  newMsgCh,
-		shutdownCh: shutdownCh,
-		errorCh:    errorCh,
+	done := make(chan struct{})
+
+	sub := NewSubscription{
+		newMsgsCh:   newMsgCh,
+		newWalletCh: newWalletCh,
+		shutdownCh:  shutdownCh,
+		errorCh:     errorCh,
 	}
-	go func() {
+	pause := 2 * time.Second
+	readScanner := func(boutput *bufio.Scanner) {
 		for {
-			select {
-			case <-shutdownCh:
-				return
-			case <-time.After(2 * time.Second):
-				// Get all unread convos
-				convs, err := a.GetConversations(true)
-				if err != nil {
+			boutput.Scan()
+			t := boutput.Text()
+			var typeHolder TypeHolder
+			if err := json.Unmarshal([]byte(t), &typeHolder); err != nil {
+				errorCh <- err
+				break
+			}
+			switch typeHolder.Type {
+			case "chat":
+				var holder MessageHolder
+				if err := json.Unmarshal([]byte(t), &holder); err != nil {
 					errorCh <- err
-					continue
+					break
 				}
-				// Get unread msgs from convs
-				msgs, err := a.getUnreadMessagesFromConvs(convs)
-				if err != nil {
+				subscriptionMessage := SubscriptionMessage{
+					Message: holder.Msg,
+					Conversation: Conversation{
+						Channel: holder.Msg.Channel,
+					},
+				}
+				newMsgCh <- subscriptionMessage
+			case "wallet":
+				var holder PaymentHolder
+				if err := json.Unmarshal([]byte(t), &holder); err != nil {
 					errorCh <- err
-					continue
+					break
 				}
-				// Send all the new messages out
-				for _, msg := range msgs {
-					newMsgCh <- msg
+				subscriptionPayment := SubscriptionWalletEvent{
+					Payment: holder.Payment,
 				}
+				newWalletCh <- subscriptionPayment
+			default:
+				continue
 			}
 		}
-	}()
+		done <- struct{}{}
+	}
 
-	return sub
+	attempts := 0
+	maxAttempts := 1800
+	go func() {
+		for {
+			if attempts >= maxAttempts {
+				panic("Listen: failed to auth, giving up")
+			}
+			attempts++
+			if _, err := a.auth(); err != nil {
+				log.Printf("Listen: failed to auth: %s", err)
+				time.Sleep(pause)
+				continue
+			}
+			cmdElements := []string{"chat", "api-listen"}
+			if opts.Wallet {
+				cmdElements = append(cmdElements, "--wallet")
+			}
+			p := a.runOpts.Command(cmdElements...)
+			output, err := p.StdoutPipe()
+			if err != nil {
+				log.Printf("Listen: failed to listen: %s", err)
+				time.Sleep(pause)
+				continue
+			}
+			boutput := bufio.NewScanner(output)
+			if err := p.Start(); err != nil {
+				log.Printf("Listen: failed to make listen scanner: %s", err)
+				time.Sleep(pause)
+				continue
+			}
+			attempts = 0
+			go readScanner(boutput)
+			<-done
+			p.Wait()
+			time.Sleep(pause)
+		}
+	}()
+	return sub, nil
+}
+
+func (a *API) GetUsername() string {
+	return a.username
+}
+
+func (a *API) LogSend(feedback string) error {
+	feedback = "go-keybase-chat-bot log send\n" +
+		"username: " + a.GetUsername() + "\n" +
+		feedback
+
+	args := []string{
+		"log", "send",
+		"--no-confirm",
+		"--feedback", feedback,
+	}
+
+	// We're determining whether the service is already running by running status
+	// with autofork disabled.
+	if err := a.runOpts.Command("--no-auto-fork", "status"); err != nil {
+		// Assume that there's no service running, so log send as standalone
+		args = append([]string{"--standalone"}, args...)
+	}
+
+	return a.runOpts.Command(args...).Run()
 }
