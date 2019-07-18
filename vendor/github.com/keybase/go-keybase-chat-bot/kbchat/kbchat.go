@@ -103,12 +103,11 @@ func (a *API) auth() (string, error) {
 	username, err := getUsername(a.runOpts)
 	if err == nil {
 		return username, nil
-	} else {
-		if a.runOpts.Oneshot == nil {
-			return "", err
-		}
-		username = ""
 	}
+	if a.runOpts.Oneshot == nil {
+		return "", err
+	}
+	username = ""
 	// If a paper key is specified, then login with oneshot mode (logout first)
 	if a.runOpts.Oneshot != nil {
 		if username == a.runOpts.Oneshot.Username {
@@ -470,6 +469,7 @@ func (a *API) Listen(opts ListenOptions) (NewSubscription, error) {
 				subscriptionMessage := SubscriptionMessage{
 					Message: holder.Msg,
 					Conversation: Conversation{
+						ID:      holder.Msg.ConversationID,
 						Channel: holder.Msg.Channel,
 					},
 				}

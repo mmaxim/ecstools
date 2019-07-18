@@ -16,6 +16,7 @@ type Channel struct {
 }
 
 type Conversation struct {
+	ID      string  `json:"id"`
 	Unread  bool    `json:"unread"`
 	Channel Channel `json:"channel"`
 }
@@ -91,22 +92,22 @@ type Thread struct {
 	Result ThreadResult `json:"result"`
 }
 
-type UserBotExtendedDescription struct {
+type CommandExtendedDescription struct {
 	Title       string `json:"title"`
 	DesktopBody string `json:"desktop_body"`
 	MobileBody  string `json:"mobile_body"`
 }
 
-type UserBotCommandInput struct {
+type Command struct {
 	Name                string                      `json:"name"`
 	Description         string                      `json:"description"`
 	Usage               string                      `json:"usage"`
-	ExtendedDescription *UserBotExtendedDescription `json:"extended_description,omitempty"`
+	ExtendedDescription *CommandExtendedDescription `json:"extended_description,omitempty"`
 }
 
 type CommandsAdvertisement struct {
 	Typ      string `json:"type"`
-	Commands UserBotCommandInput
+	Commands []Command
 	TeamName string `json:"team_name,omitempty"`
 }
 
