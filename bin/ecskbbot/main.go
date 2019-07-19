@@ -104,10 +104,16 @@ func (s *BotServer) runServiceOutput(cluster string, out io.Writer) error {
 func (s *BotServer) shouldSendToConv(conv kbchat.Conversation, msg kbchat.Message) (*runSpec, error) {
 	if strings.HasPrefix(msg.Content.Text.Body, "!ecslist") {
 		toks := strings.Split(strings.Trim(msg.Content.Text.Body, " "), " ")
+		if err := s.kbc.ReactByConvID(conv.ID, msg.MsgID, ":wave:"); err != nil {
+			s.debug("failed to react: %s", err)
+		}
 		if len(toks) == 2 {
-			return &runSpec{conv: conv, cluster: toks[1], author: msg.Sender.Username}, nil
+			return &runSpec{conv: conv, msg: msg, cluster: toks[1], author: msg.Sender.Username}, nil
 		} else if len(toks) == 1 {
-			return &runSpec{conv: conv, cluster: s.opts.ClusterName, author: msg.Sender.Username}, nil
+			return &runSpec{conv: conv, msg: msg, cluster: s.opts.ClusterName, author: msg.Sender.Username}, nil
+		}
+		if err := s.kbc.ReactByConvID(conv.ID, msg.MsgID, ":-1:"); err != nil {
+			s.debug("failed to react: %s", err)
 		}
 		s.kbc.SendMessageByConvID(conv.ID, "invalid ecslist command")
 		return nil, nil
@@ -118,6 +124,7 @@ func (s *BotServer) shouldSendToConv(conv kbchat.Conversation, msg kbchat.Messag
 
 type runSpec struct {
 	conv    kbchat.Conversation
+	msg     kbchat.Message
 	cluster string
 	author  string
 }
@@ -134,6 +141,9 @@ func (s *BotServer) sendReply(spec *runSpec) error {
 	outputRes := fmt.Sprintf("```%s```", ecsInfo.String())
 	if err := s.kbc.SendMessageByConvID(spec.conv.ID, outputRes); err != nil {
 		return err
+	}
+	if err := s.kbc.ReactByConvID(spec.conv.ID, spec.msg.MsgID, ":white_check_mark:"); err != nil {
+		s.debug("failed to react: %s", err)
 	}
 	return nil
 }
