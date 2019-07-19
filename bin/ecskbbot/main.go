@@ -48,7 +48,7 @@ func (s *BotServer) debug(msg string, args ...interface{}) {
 }
 
 func (s *BotServer) makeAdvertisement(teamName string) kbchat.Advertisement {
-	var listExtendedBody = fmt.Sprintf(`!ecslist by itself will dump out information about the gregord cluster. By specifying a valid cluster name, a user can info about it as well. Example usages:
+	var listExtendedBody = fmt.Sprintf(`!ecslist by itself will dump out information about the gregord cluster. By specifying a valid cluster name, a user can get info about it as well. Example usages:
 %s!ecslist        # list out information about gregord
 !ecslist kbfs   # list out information about kbfs%s`, trips, trips)
 	return kbchat.Advertisement{
