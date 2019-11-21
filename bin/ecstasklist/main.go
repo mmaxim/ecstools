@@ -14,10 +14,11 @@ func main() {
 }
 
 func mainInner() int {
-	var clusterName, region string
+	var clusterName, serviceName, region string
 	var shortArns bool
 
 	flag.StringVar(&clusterName, "cluster", "gregord", "cluster name")
+	flag.StringVar(&serviceName, "service", "gregord", "srvice name")
 	flag.StringVar(&region, "region", "us-east-1", "AWS region name")
 	flag.BoolVar(&shortArns, "short-arns", true, "display only last part of ARN")
 	flag.Parse()
@@ -27,18 +28,18 @@ func mainInner() int {
 		Region:  region,
 	})
 	if err != nil {
-		fmt.Printf("failed to create ECS API object: %s", err.Error())
+		fmt.Printf("failed to create ECS API object: %s\n", err)
 		return 3
 	}
 
-	services, err := ecs.ListServices()
+	tasks, err := ecs.ListTasks(serviceName)
 	if err != nil {
-		fmt.Printf("failed to list services: %s", err.Error())
+		fmt.Printf("failed to list services: %s\n", err)
 	}
 
 	output := libecs.NewColorServiceOutputer(shortArns)
-	if err := output.DisplayServices(services, os.Stdout); err != nil {
-		fmt.Println("failed to display: %s", err.Error())
+	if err := output.DisplayTasks(tasks, os.Stdout); err != nil {
+		fmt.Printf("failed to display: %s\n", err)
 		return 3
 	}
 

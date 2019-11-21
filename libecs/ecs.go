@@ -114,10 +114,10 @@ func (e *ECS) getInstanceMetrics(instance string) (InstanceMetrics, error) {
 	}, nil
 }
 
-func (e *ECS) listTasks(svc *ecs.Service) ([]Task, error) {
+func (e *ECS) ListTasks(serviceName string) ([]Task, error) {
 	resp, err := e.ecs.ListTasks(&ecs.ListTasksInput{
 		Cluster:     aws.String(e.cluster()),
-		ServiceName: svc.ServiceName,
+		ServiceName: aws.String(serviceName),
 	})
 	if err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func (e *ECS) ListServices() ([]Service, error) {
 				TaskDefinition: aws.StringValue(svc.TaskDefinition),
 				Metrics:        metrics,
 			}
-			if s.Tasks, err = e.listTasks(svc); err != nil {
+			if s.Tasks, err = e.ListTasks(aws.StringValue(svc.ServiceName)); err != nil {
 				return nil, err
 			}
 			res = append(res, s)

@@ -25,7 +25,8 @@ func getInstanceCPU(task Task) string {
 }
 
 type ServiceOutputer interface {
-	Display(svcs []Service, w io.Writer) error
+	DisplayServices(svcs []Service, w io.Writer) error
+	DisplayTasks(tasks []Task, w io.Writer) error
 }
 
 type BasicServiceOutputer struct {
@@ -46,7 +47,19 @@ func (o BasicServiceOutputer) truncateARN(arn string, enabled bool) string {
 	return toks[1]
 }
 
-func (o BasicServiceOutputer) Display(services []Service, out io.Writer) error {
+func (o BasicServiceOutputer) DisplayTasks(tasks []Task, out io.Writer) error {
+	w := tabwriter.NewWriter(out, 0, 3, 5, ' ', tabwriter.FilterHTML)
+	fmt.Fprintf(w, "Status\tDesired\tTask\tCreated At\tInstance ID\tInstance CPU%%\n")
+	for _, task := range tasks {
+		ca := task.CreatedAt.Format("01-02-2006 15:04")
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", task.Status, task.DesiredStatus,
+			o.truncateARN(task.TaskDefinition, o.shortArns), ca, getInstanceID(task),
+			getInstanceCPU(task))
+	}
+	return w.Flush()
+}
+
+func (o BasicServiceOutputer) DisplayServices(services []Service, out io.Writer) error {
 	buffer := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buffer, 0, 3, 5, ' ', tabwriter.FilterHTML)
 	fmt.Fprintf(w, "Name\tRunning\tPending\tTask\tCPU%%\tMemory%%\n")
@@ -101,7 +114,30 @@ func (o ColorServiceOutputer) truncateARN(arn string, enabled bool) string {
 	return toks[1]
 }
 
-func (o ColorServiceOutputer) Display(services []Service, out io.Writer) error {
+func (o ColorServiceOutputer) DisplayTasks(tasks []Task, out io.Writer) error {
+	buffer := &bytes.Buffer{}
+	w := tabwriter.NewWriter(buffer, 0, 3, 5, ' ', tabwriter.FilterHTML)
+	fmt.Fprintf(w, "<fg 13><bold>Status\tDesired\tTask\tCreated At\tInstance ID\tInstance CPU%%<reset>\n")
+	for _, task := range tasks {
+		ca := task.CreatedAt.Format("01-02-2006 15:04")
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", task.Status, task.DesiredStatus,
+			o.truncateARN(task.TaskDefinition, o.shortArns), ca, getInstanceID(task),
+			getInstanceCPU(task))
+	}
+	w.Flush()
+	loreley.DelimLeft = "<"
+	loreley.DelimRight = ">"
+	result, err := loreley.CompileAndExecuteToString(buffer.String(), nil, nil)
+	if err != nil {
+		return fmt.Errorf("error formating output: %s", err.Error())
+	}
+	if _, err = out.Write([]byte(result)); err != nil {
+		return fmt.Errorf("error writing output: %s", err.Error())
+	}
+	return nil
+}
+
+func (o ColorServiceOutputer) DisplayServices(services []Service, out io.Writer) error {
 	buffer := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buffer, 0, 3, 5, ' ', tabwriter.FilterHTML)
 	fmt.Fprintf(w, "<fg 13><bold>Name\tRunning\tPending\tTask\tCPU%%\tMemory%%<reset>\n")

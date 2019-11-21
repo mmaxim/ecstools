@@ -94,7 +94,7 @@ func (s *BotServer) runServiceOutput(cluster string, out io.Writer) error {
 
 	output := libecs.NewBasicServiceOutputer(s.opts.ShortArns)
 
-	if err := output.Display(services, out); err != nil {
+	if err := output.DisplayServices(services, out); err != nil {
 		s.debug("failed to display: %s", err.Error())
 		return err
 	}
