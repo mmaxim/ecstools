@@ -1,6 +1,9 @@
 package libecs
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -212,6 +215,75 @@ func (e *ECS) getServiceMetrics(svcname string) (ServiceMetrics, error) {
 		CPU:    cpu,
 		Memory: mem,
 	}, nil
+}
+
+func (e *ECS) getServiceMetricGraph(svcname, metric string, duration time.Duration) (io.Reader, error) {
+	metrics := fmt.Sprintf(`
+		{
+			"title": "%s %s",
+			"period": 1,
+			"yAxis":{
+				"left":{
+				   "min":0,
+				   "max":100
+				}
+			 },
+			"metrics": [
+				[
+					"AWS/ECS", 
+					"%s", 
+					"ClusterName", 
+					"%s",
+					"ServiceName",
+					"%s",
+					{
+						"id": "m1",
+						"stat": "Average"
+					}
+				],
+				[
+					".", 
+					".", 
+					".", 
+					".",
+					".",
+					".",
+					{
+						"id": "m2",
+						"stat": "Maximum"
+					}
+				],
+				[
+					".", 
+					".", 
+					".", 
+					".",
+					".",
+					".",
+					{
+						"id": "m3",
+						"stat": "Minimum"
+					}
+				]
+			]
+		}
+	`, svcname, metric, metric, e.cluster(), svcname)
+	res, err := e.cloudwatch.GetMetricWidgetImage(&cloudwatch.GetMetricWidgetImageInput{
+		MetricWidget: aws.String(metrics),
+		OutputFormat: aws.String("png"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewBuffer(res.MetricWidgetImage), nil
+}
+
+func (e *ECS) GetServiceCPUGraph(svcname string, duration time.Duration) (io.Reader, error) {
+	return e.getServiceMetricGraph(svcname, "CPUUtilization", duration)
+}
+
+func (e *ECS) GetServiceMemoryGraph(svcname string, duration time.Duration) (io.Reader, error) {
+	return e.getServiceMetricGraph(svcname, "MemoryUtilization", duration)
 }
 
 func (e *ECS) ListServices() ([]Service, error) {
